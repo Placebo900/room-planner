@@ -1,188 +1,151 @@
-import React, { useState, useRef } from 'react';
-import { Stage, Layer, Line, Circle, Text, Rect, Group } from 'react-konva';
-import type { KonvaEventObject } from 'konva/lib/Node';
-import Konva from 'konva';
+import { useState, useCallback, useEffect } from 'react';
+import type { EditorElement, Tool, ViewMode, Furniture, ChatMessage, Product, Point, Window, Door, Wall } from './types/editor';
+import { Toolbar } from './components/Editor/Toolbar';
+import { EditorCanvas } from './components/Editor/EditorCanvas';
+import { WallPropertiesPanel } from './components/Editor/WallPropertiesPanel';
+import { ProductPanel } from './components/Panels/ProductPanel';
+import { AIChat } from './components/Panels/AIChat';
+import { Toast } from './components/UI/Toast';
+import { useWallDrawing } from './hooks/useWallDrawing';
+import { useToast } from './hooks/useToast';
+import { mockProducts } from './constants/mockProducts';
+import { isPointOnWall, getClosestPointOnWall, mmToPixels } from './utils/geometry';
 
-// Types
-interface Point {
-  x: number;
-  y: number;
-}
-
-interface Wall {
-  id: string;
-  type: 'wall';
-  startPoint: Point;
-  endPoint: Point;
-  thickness: number;
-}
-
-interface Window {
-  id: string;
-  type: 'window';
-  startPoint: Point;
-  endPoint: Point;
-  width: number;
-}
-
-interface Door {
-  id: string;
-  type: 'door';
-  startPoint: Point;
-  endPoint: Point;
-  width: number;
-}
-
-interface Furniture {
-  id: string;
-  type: 'furniture';
-  category: string;
-  productId?: string;
-  position: Point;
-  dimensions: { width: number; height: number };
-  rotation: number;
-  price: number;
-  name: string;
-}
-
-interface Product {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  dimensions: { width: number; height: number; depth?: number };
-  imageUrl: string;
-  category: string;
-}
-
-type EditorElement = Wall | Window | Door | Furniture;
-type Tool = 'select' | 'wall' | 'window' | 'door' | 'stool' | 'table' | 'sofa' | 'bed' | 'sink' | 'shower' | 'toilet' | 'tv';
-
-// Constants
-const SCALE = 0.1; // 1px = 10mm
-const GRID_SIZE = 50; // 500mm
-const WALL_THICKNESS = 10;
-
-// Mock Products Data
-const mockProducts: { [key: string]: Product[] } = {
-  stool: [
-    { id: 's1', name: 'Стол базовый', description: 'Простой обеденный стол', price: 22000, dimensions: { width: 1200, height: 800 }, imageUrl: '🪑', category: 'stool' },
-    { id: 's2', name: 'Стол с крестиками', description: 'Дизайнерский стол', price: 33333, dimensions: { width: 1400, height: 900 }, imageUrl: '🪑', category: 'stool' },
-    { id: 's3', name: 'Стол с одной ножкой', description: 'Современный стол', price: 27000, dimensions: { width: 1000, height: 1000 }, imageUrl: '🪑', category: 'stool' },
-  ],
-  table: [
-    { id: 't1', name: 'Столик', description: 'Журнальный столик', price: 16000, dimensions: { width: 800, height: 600 }, imageUrl: '🔲', category: 'table' },
-    { id: 't2', name: 'Столбешник', description: 'Барный стол', price: 34557, dimensions: { width: 600, height: 1200 }, imageUrl: '🔲', category: 'table' },
-  ],
-  sofa: [
-    { id: 'sf1', name: 'Диван угловой', description: 'Комфортный угловой диван', price: 90000, dimensions: { width: 2700, height: 1700 }, imageUrl: '🛋️', category: 'sofa' },
-    { id: 'sf2', name: 'Диван прямой', description: 'Классический диван', price: 65000, dimensions: { width: 2200, height: 900 }, imageUrl: '🛋️', category: 'sofa' },
-  ],
-  bed: [
-    { id: 'b1', name: 'Кровать двуспальная', description: 'Кровать 160x200', price: 45000, dimensions: { width: 1600, height: 2000 }, imageUrl: '🛏️', category: 'bed' },
-    { id: 'b2', name: 'Кровать полуторная', description: 'Кровать 120x200', price: 35000, dimensions: { width: 1200, height: 2000 }, imageUrl: '🛏️', category: 'bed' },
-  ],
-  sink: [
-    { id: 'sn1', name: 'Раковина стандарт', description: 'Керамическая раковина', price: 12000, dimensions: { width: 600, height: 500 }, imageUrl: '🚿', category: 'sink' },
-  ],
-  shower: [
-    { id: 'sh1', name: 'Душевая кабина', description: 'Стеклянная кабина 90x90', price: 55000, dimensions: { width: 900, height: 900 }, imageUrl: '🚿', category: 'shower' },
-  ],
-  toilet: [
-    { id: 'tl1', name: 'Унитаз подвесной', description: 'Современный подвесной унитаз', price: 25000, dimensions: { width: 400, height: 600 }, imageUrl: '🚽', category: 'toilet' },
-  ],
-  tv: [
-    { id: 'tv1', name: 'Телевизор 55"', description: 'Smart TV 55 дюймов', price: 65000, dimensions: { width: 1200, height: 50 }, imageUrl: '📺', category: 'tv' },
-  ]
-};
-
-// Utility Functions
-const calculateDistance = (p1: Point, p2: Point): number => {
-  return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
-};
-
-const calculateAngle = (p1: Point, p2: Point, p3: Point): number => {
-  const angle1 = Math.atan2(p1.y - p2.y, p1.x - p2.x);
-  const angle2 = Math.atan2(p3.y - p2.y, p3.x - p2.x);
-  let angle = (angle2 - angle1) * (180 / Math.PI);
-  if (angle < 0) angle += 360;
-  if (angle > 180) angle = 360 - angle;
-  return Math.round(angle);
-};
-
-const getMidpoint = (p1: Point, p2: Point): Point => {
-  return { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-};
-
-// Main App Component
 export default function RoomPlannerApp() {
+  // State management
   const [tool, setTool] = useState<Tool>('select');
   const [elements, setElements] = useState<EditorElement[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [drawingStart, setDrawingStart] = useState<Point | null>(null);
-  const [showProductPanel, setShowProductPanel] = useState(false);
   const [selectedFurniture, setSelectedFurniture] = useState<Furniture | null>(null);
-  const [viewMode, setViewMode] = useState<'2D' | '3D'>('2D');
-  const [chatMessages, setChatMessages] = useState<Array<{text: string, isUser: boolean}>>([
-    { text: "Смотрю схему дома...", isUser: false },
-    { text: "Изучаю цветовую гамму...", isUser: false },
+  const [selectedWindow, setSelectedWindow] = useState<Window | null>(null);
+  const [selectedDoor, setSelectedDoor] = useState<Door | null>(null);
+  const [selectedWall, setSelectedWall] = useState<Wall | null>(null);
+  const [showProductPanel, setShowProductPanel] = useState(false);
+  const [showWallPanel, setShowWallPanel] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('2D');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    { text: "Привет! Я ваш AI-помощник по планированию интерьера. Могу помочь с планировкой, подбором мебели и дать советы по дизайну. Просто спросите!", isUser: false },
   ]);
-  const [chatInput, setChatInput] = useState('');
-  const stageRef = useRef<Konva.Stage>(null);
 
+  // Toast notifications
+  const { toasts, removeToast, success, error, warning, info } = useToast();
+
+  // Wall drawing hook with improved logic
+  const {
+    isDrawing,
+    drawingStart,
+    previewEnd,
+    isAxisSnapped,
+    handleClick: handleWallClick,
+    handleMouseMove: handleWallMouseMove,
+    cancelDrawing
+  } = useWallDrawing({
+    tool,
+    elements,
+    onAddElement: (element) => {
+      setElements(prev => [...prev, element]);
+      success('Стена добавлена');
+    },
+    onFinishDrawing: () => {
+      setTool('select');
+      info('Рисование завершено');
+    }
+  });
+
+  // Calculate total price
   const totalPrice = elements
-    .filter(el => el.type === 'furniture')
-    .reduce((sum, el) => sum + (el as Furniture).price, 0);
+    .filter(el => el.type === 'furniture' || el.type === 'window' || el.type === 'door')
+    .reduce((sum, el) => {
+      if (el.type === 'furniture') {
+        return sum + (el as Furniture).price;
+      } else if (el.type === 'window') {
+        return sum + ((el as Window).price || 0);
+      } else if (el.type === 'door') {
+        return sum + ((el as Door).price || 0);
+      }
+      return sum;
+    }, 0);
 
-  const handleStageClick = (e: KonvaEventObject<MouseEvent>) => {
-    const stage = e.target.getStage();
-    if (!stage) return;
-    
-    const point = stage.getPointerPosition();
-    if (!point) return;
+  // Canvas dimensions
+  const canvasWidth = window.innerWidth - 640;
+  const canvasHeight = window.innerHeight - 100;
 
-    if (tool === 'wall' || tool === 'window' || tool === 'door') {
-      if (!isDrawing) {
-        setDrawingStart(point);
-        setIsDrawing(true);
-      } else {
-        if (drawingStart) {
-          const id = Date.now().toString();
-          let newElement: EditorElement;
-          
-          if (tool === 'wall') {
-            newElement = {
-              id,
-              type: 'wall',
-              startPoint: drawingStart,
-              endPoint: point,
-              thickness: WALL_THICKNESS
-            };
-          } else if (tool === 'window') {
-            newElement = {
-              id,
-              type: 'window',
-              startPoint: drawingStart,
-              endPoint: point,
-              width: 100
-            };
-          } else {
-            newElement = {
-              id,
-              type: 'door',
-              startPoint: drawingStart,
-              endPoint: point,
-              width: 90
-            };
-          }
-          
-          setElements([...elements, newElement]);
-          setIsDrawing(false);
-          setDrawingStart(null);
+  // ESC key handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isDrawing) {
+          cancelDrawing();
+          warning('Рисование отменено');
+        }
+        if (showWallPanel) {
+          setShowWallPanel(false);
+          setSelectedWall(null);
+          setSelectedId(null);
+        }
+        if (showProductPanel) {
+          setShowProductPanel(false);
+          setSelectedFurniture(null);
+          setSelectedWindow(null);
+          setSelectedDoor(null);
+          setSelectedId(null);
         }
       }
-    } else if (['stool', 'table', 'sofa', 'bed', 'sink', 'shower', 'toilet', 'tv'].includes(tool)) {
+      if (e.key === 'Delete' && selectedId) {
+        handleDeleteElement(selectedId);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isDrawing, showWallPanel, showProductPanel, selectedId, cancelDrawing]);
+
+  const handleStageClick = useCallback((point: Point) => {
+    if (tool === 'wall') {
+      handleWallClick(point);
+      return;
+    }
+
+    if (tool === 'window' || tool === 'door') {
+      const walls = elements.filter(el => el.type === 'wall') as Wall[];
+      let placedOnWall = false;
+
+      for (const wall of walls) {
+        if (isPointOnWall(point, wall, 30)) {
+          const closestPoint = getClosestPointOnWall(point, wall);
+          const id = Date.now().toString();
+          
+          const newElement: Window | Door = tool === 'window' ? {
+            id,
+            type: 'window',
+            startPoint: { x: closestPoint.x - 50, y: closestPoint.y },
+            endPoint: { x: closestPoint.x + 50, y: closestPoint.y },
+            width: 100,
+            wallId: wall.id
+          } : {
+            id,
+            type: 'door',
+            startPoint: { x: closestPoint.x - 45, y: closestPoint.y },
+            endPoint: { x: closestPoint.x + 45, y: closestPoint.y },
+            width: 90,
+            wallId: wall.id
+          };
+          
+          setElements(prev => [...prev, newElement]);
+          setTool('select');
+          success(tool === 'window' ? 'Окно добавлено' : 'Дверь добавлена');
+          placedOnWall = true;
+          break;
+        }
+      }
+
+      if (!placedOnWall) {
+        error('Окна и двери можно размещать только на стенах!');
+      }
+      return;
+    }
+
+    if (['stool', 'table', 'sofa', 'bed', 'sink', 'shower', 'toilet', 'tv'].includes(tool)) {
       const category = tool;
       const defaultProduct = mockProducts[category]?.[0];
       if (defaultProduct) {
@@ -198,27 +161,69 @@ export default function RoomPlannerApp() {
           name: defaultProduct.name,
           productId: defaultProduct.id
         };
-        setElements([...elements, newFurniture]);
+        setElements(prev => [...prev, newFurniture]);
         setTool('select');
+        success(`${defaultProduct.name} добавлен`);
       }
     }
-  };
+  }, [tool, handleWallClick, elements, success, error]);
 
-  const handleElementClick = (id: string) => {
+  const handleStageMouseMove = useCallback((point: Point) => {
+    if (tool === 'wall') {
+      handleWallMouseMove(point);
+    }
+  }, [tool, handleWallMouseMove]);
+
+  const handleElementClick = useCallback((id: string) => {
     if (tool === 'select') {
       setSelectedId(id);
       const element = elements.find(el => el.id === id);
-      if (element && element.type === 'furniture') {
-        setSelectedFurniture(element as Furniture);
-        setShowProductPanel(true);
+      
+      if (element) {
+        if (element.type === 'furniture') {
+          setSelectedFurniture(element as Furniture);
+          setSelectedWindow(null);
+          setSelectedDoor(null);
+          setShowProductPanel(true);
+          setShowWallPanel(false);
+          setSelectedWall(null);
+        } else if (element.type === 'window') {
+          setSelectedWindow(element as Window);
+          setSelectedFurniture(null);
+          setSelectedDoor(null);
+          setShowProductPanel(true);
+          setShowWallPanel(false);
+          setSelectedWall(null);
+        } else if (element.type === 'door') {
+          setSelectedDoor(element as Door);
+          setSelectedFurniture(null);
+          setSelectedWindow(null);
+          setShowProductPanel(true);
+          setShowWallPanel(false);
+          setSelectedWall(null);
+        } else if (element.type === 'wall') {
+          setSelectedWall(element as Wall);
+          setSelectedWindow(null);
+          setSelectedDoor(null);
+          setShowWallPanel(true);
+          setShowProductPanel(false);
+          setSelectedFurniture(null);
+        } else {
+          setShowProductPanel(false);
+          setShowWallPanel(false);
+          setSelectedFurniture(null);
+          setSelectedWindow(null);
+          setSelectedDoor(null);
+          setSelectedWall(null);
+        }
       }
     }
-  };
+  }, [tool, elements]);
 
-  const handleProductSelect = (product: Product) => {
+  const handleProductSelect = useCallback((product: Product) => {
     if (selectedFurniture) {
-      const updatedElements = elements.map(el => {
-        if (el.id === selectedFurniture.id) {
+      setElements(prev => prev.map(el => {
+        if (el.id === selectedFurniture.id && el.type === 'furniture') {
           return {
             ...el,
             productId: product.id,
@@ -228,409 +233,614 @@ export default function RoomPlannerApp() {
           } as Furniture;
         }
         return el;
-      });
-      setElements(updatedElements);
+      }));
       setShowProductPanel(false);
-    }
-  };
-
-  const handleFurnitureUpdate = (id: string, updates: Partial<Furniture>) => {
-    setElements(elements.map(el => 
-      el.id === id && el.type === 'furniture' ? { ...el, ...updates } : el
-    ));
-  };
-
-  // Toolbar Component
-  const Toolbar = () => (
-    <div className="bg-white border-b border-gray-200 p-2">
-      <div className="flex items-center justify-between">
-        <div className="flex gap-2">
-          {[
-            { tool: 'select' as Tool, icon: '👆', label: 'Select' },
-            { tool: 'wall' as Tool, icon: '🧱', label: 'Стена' },
-            { tool: 'window' as Tool, icon: '🪟', label: 'Окно' },
-            { tool: 'door' as Tool, icon: '🚪', label: 'Дверь' },
-            { tool: 'stool' as Tool, icon: '🪑', label: 'Стул' },
-            { tool: 'table' as Tool, icon: '🔲', label: 'Стол' },
-            { tool: 'sofa' as Tool, icon: '🛋️', label: 'Диван/Кресло' },
-            { tool: 'bed' as Tool, icon: '🛏️', label: 'Кровать' },
-            { tool: 'sink' as Tool, icon: '🚰', label: 'Раковина' },
-            { tool: 'shower' as Tool, icon: '🚿', label: 'Душ/Ванна' },
-            { tool: 'toilet' as Tool, icon: '🚽', label: 'Туалет' },
-            { tool: 'tv' as Tool, icon: '📺', label: 'Телевизор' },
-          ].map(({ tool: t, icon, label }) => (
-            <button
-              key={t}
-              onClick={() => setTool(t)}
-              className={`px-3 py-2 rounded flex flex-col items-center gap-1 transition-all ${
-                tool === t 
-                  ? 'bg-green-500 text-white' 
-                  : 'bg-gray-100 hover:bg-gray-200'
-              }`}
-            >
-              <span className="text-xl">{icon}</span>
-              <span className="text-xs">{label}</span>
-            </button>
-          ))}
-        </div>
+      setSelectedFurniture(null);
+      success('Товар обновлён');
+    } else if (selectedWindow) {
+      // Handle window product selection
+      const wall = elements.find(el => el.id === selectedWindow.wallId && el.type === 'wall') as Wall | undefined;
+      
+      if (wall) {
+        const wallDx = wall.endPoint.x - wall.startPoint.x;
+        const wallDy = wall.endPoint.y - wall.startPoint.y;
+        const wallLength = Math.sqrt(wallDx * wallDx + wallDy * wallDy);
         
-        <div className="flex gap-2">
-          <button
-            onClick={() => setViewMode('2D')}
-            className={`px-4 py-2 rounded ${viewMode === '2D' ? 'bg-green-500 text-white' : 'bg-green-100'}`}
-          >
-            2D
-          </button>
-          <button
-            onClick={() => setViewMode('3D')}
-            className={`px-4 py-2 rounded ${viewMode === '3D' ? 'bg-green-100' : 'bg-gray-100'}`}
-            disabled
-          >
-            3D
-          </button>
-          <button className="px-4 py-2 bg-purple-100 text-purple-700 rounded">
-            Click to generate video of home!
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Wall Render Component
-  const WallRender = ({ wall }: { wall: Wall }) => {
-    const distance = calculateDistance(wall.startPoint, wall.endPoint) / SCALE;
-    const midpoint = getMidpoint(wall.startPoint, wall.endPoint);
-    const angle = Math.atan2(
-      wall.endPoint.y - wall.startPoint.y,
-      wall.endPoint.x - wall.startPoint.x
-    ) * (180 / Math.PI);
-
-    return (
-      <Group>
-        <Line
-          points={[wall.startPoint.x, wall.startPoint.y, wall.endPoint.x, wall.endPoint.y]}
-          stroke="black"
-          strokeWidth={wall.thickness}
-          onClick={() => handleElementClick(wall.id)}
-        />
-        <Text
-          x={midpoint.x}
-          y={midpoint.y - 20}
-          text={`${Math.round(distance)}mm`}
-          fontSize={12}
-          fill="blue"
-          align="center"
-          rotation={angle}
-        />
-      </Group>
-    );
-  };
-
-  // Window Render Component
-  const WindowRender = ({ window }: { window: Window }) => {
-    return (
-      <Group>
-        <Line
-          points={[window.startPoint.x, window.startPoint.y, window.endPoint.x, window.endPoint.y]}
-          stroke="cyan"
-          strokeWidth={8}
-          onClick={() => handleElementClick(window.id)}
-        />
-      </Group>
-    );
-  };
-
-  // Door Render Component
-  const DoorRender = ({ door }: { door: Door }) => {
-    return (
-      <Group>
-        <Line
-          points={[door.startPoint.x, door.startPoint.y, door.endPoint.x, door.endPoint.y]}
-          stroke="brown"
-          strokeWidth={8}
-          onClick={() => handleElementClick(door.id)}
-        />
-        <Circle
-          x={door.startPoint.x}
-          y={door.startPoint.y}
-          radius={40}
-          stroke="brown"
-          strokeWidth={2}
-          dash={[5, 5]}
-        />
-      </Group>
-    );
-  };
-
-  // Furniture Render Component
-  const FurnitureRender = ({ furniture }: { furniture: Furniture }) => {
-    const isSelected = selectedId === furniture.id;
-    
-    return (
-      <Group
-        x={furniture.position.x}
-        y={furniture.position.y}
-        draggable
-        onDragEnd={(e) => {
-          handleFurnitureUpdate(furniture.id, {
-            position: { x: e.target.x(), y: e.target.y() }
-          });
-        }}
-        onClick={() => handleElementClick(furniture.id)}
-      >
-        <Rect
-          x={-furniture.dimensions.width * SCALE / 2}
-          y={-furniture.dimensions.height * SCALE / 2}
-          width={furniture.dimensions.width * SCALE}
-          height={furniture.dimensions.height * SCALE}
-          fill="lightgray"
-          stroke={isSelected ? "blue" : "gray"}
-          strokeWidth={isSelected ? 2 : 1}
-        />
-        <Text
-          x={-furniture.dimensions.width * SCALE / 2}
-          y={-furniture.dimensions.height * SCALE / 2 - 20}
-          text={furniture.name}
-          fontSize={10}
-          fill="black"
-        />
-      </Group>
-    );
-  };
-
-  // Product Panel Component
-  const ProductPanel = () => {
-    if (!showProductPanel || !selectedFurniture) return null;
-    
-    const category = selectedFurniture.category;
-    const products = mockProducts[category] || [];
-    
-    // Sort products by how close they are to current dimensions
-    const sortedProducts = [...products].sort((a, b) => {
-      const aDiff = Math.abs(a.dimensions.width - selectedFurniture.dimensions.width) + 
-                    Math.abs(a.dimensions.height - selectedFurniture.dimensions.height);
-      const bDiff = Math.abs(b.dimensions.width - selectedFurniture.dimensions.width) + 
-                    Math.abs(b.dimensions.height - selectedFurniture.dimensions.height);
-      return aDiff - bDiff;
-    });
-
-    return (
-      <div className="w-80 bg-white border-l border-gray-200 overflow-y-auto">
-        <div className="p-4 border-b">
-          <h3 className="font-bold">Выберите товар</h3>
-          <button 
-            onClick={() => setShowProductPanel(false)}
-            className="float-right text-gray-500"
-          >
-            ✕
-          </button>
-        </div>
-        <div className="p-4 space-y-4">
-          {sortedProducts.map(product => (
-            <div
-              key={product.id}
-              className="border rounded p-3 cursor-pointer hover:bg-gray-50 transition-colors"
-              onClick={() => handleProductSelect(product)}
-            >
-              <div className="flex items-center gap-3">
-                <div className="text-4xl">{product.imageUrl}</div>
-                <div className="flex-1">
-                  <h4 className="font-semibold">{product.name}</h4>
-                  <p className="text-sm text-gray-600">{product.description}</p>
-                  <p className="text-xs text-gray-500">
-                    {product.dimensions.width} x {product.dimensions.height} мм
-                  </p>
-                  <p className="text-lg font-bold text-green-600">
-                    {product.price.toLocaleString()} руб
-                  </p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  // AI Chat Component
-  const AIChat = () => {
-    const handleSendMessage = () => {
-      if (chatInput.trim()) {
-        setChatMessages([...chatMessages, { text: chatInput, isUser: true }]);
-        setChatInput('');
-        // Mock AI response
-        setTimeout(() => {
-          setChatMessages(prev => [...prev, { 
-            text: "Я изучаю планировку и скоро предложу оптимальное расположение мебели.", 
-            isUser: false 
-          }]);
-        }, 1000);
+        if (wallLength > 0) {
+          // Get current window center
+          const currentMidX = (selectedWindow.startPoint.x + selectedWindow.endPoint.x) / 2;
+          const currentMidY = (selectedWindow.startPoint.y + selectedWindow.endPoint.y) / 2;
+          
+          // Calculate new window dimensions based on product width (in mm)
+          // Convert from mm to pixels (1px = 10mm, so divide by 10)
+          const newWindowLength = mmToPixels(product.dimensions.width || 1200); // Default 1.2m
+          const halfLength = newWindowLength / 2;
+          
+          // Unit vector along wall
+          const unitDx = wallDx / wallLength;
+          const unitDy = wallDy / wallLength;
+          
+          setElements(prev => prev.map(el => {
+            if (el.id === selectedWindow.id && el.type === 'window') {
+              return {
+                ...el,
+                productId: product.id,
+                name: product.name,
+                price: product.price,
+                startPoint: {
+                  x: currentMidX - halfLength * unitDx,
+                  y: currentMidY - halfLength * unitDy
+                },
+                endPoint: {
+                  x: currentMidX + halfLength * unitDx,
+                  y: currentMidY + halfLength * unitDy
+                }
+              } as Window;
+            }
+            return el;
+          }));
+          
+          setShowProductPanel(false);
+          setSelectedWindow(null);
+          success(`Окно заменено на ${product.name}`);
+        }
       }
-    };
+    } else if (selectedDoor) {
+      // Handle door product selection
+      const wall = elements.find(el => el.id === selectedDoor.wallId && el.type === 'wall') as Wall | undefined;
+      
+      if (wall) {
+        const wallDx = wall.endPoint.x - wall.startPoint.x;
+        const wallDy = wall.endPoint.y - wall.startPoint.y;
+        const wallLength = Math.sqrt(wallDx * wallDx + wallDy * wallDy);
+        
+        if (wallLength > 0) {
+          // Get current door center
+          const currentMidX = (selectedDoor.startPoint.x + selectedDoor.endPoint.x) / 2;
+          const currentMidY = (selectedDoor.startPoint.y + selectedDoor.endPoint.y) / 2;
+          
+          // Calculate new door dimensions based on product width (in mm)
+          // Convert from mm to pixels (1px = 10mm, so divide by 10)
+          const newDoorLength = mmToPixels(product.dimensions.width || 900); // Default 0.9m
+          const halfLength = newDoorLength / 2;
+          
+          // Unit vector along wall
+          const unitDx = wallDx / wallLength;
+          const unitDy = wallDy / wallLength;
+          
+          setElements(prev => prev.map(el => {
+            if (el.id === selectedDoor.id && el.type === 'door') {
+              return {
+                ...el,
+                productId: product.id,
+                name: product.name,
+                price: product.price,
+                startPoint: {
+                  x: currentMidX - halfLength * unitDx,
+                  y: currentMidY - halfLength * unitDy
+                },
+                endPoint: {
+                  x: currentMidX + halfLength * unitDx,
+                  y: currentMidY + halfLength * unitDy
+                }
+              } as Door;
+            }
+            return el;
+          }));
+          
+          setShowProductPanel(false);
+          setSelectedDoor(null);
+          success(`Дверь заменена на ${product.name}`);
+        }
+      }
+    }
+  }, [selectedFurniture, selectedWindow, selectedDoor, elements, success]);
 
-    return (
-      <div className="w-80 bg-gray-50 border-r border-gray-200 flex flex-col">
-        <div className="p-4 bg-white border-b">
-          <h3 className="font-bold">Designer Agent</h3>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          <div className="bg-white p-3 rounded">
-            <p className="text-sm">Распредели двери по квартире оптимальным способом и подбери лучшие по цветовой гамме</p>
-          </div>
-          <div className="bg-white p-3 rounded">
-            <p className="text-sm text-gray-600">Изучу ваш план дома и подберу идеальное расположение дверей</p>
-          </div>
-          {chatMessages.map((msg, idx) => (
-            <div key={idx} className={`p-3 rounded ${msg.isUser ? 'bg-blue-100 ml-auto' : 'bg-white'}`}>
-              <p className="text-sm">{msg.text}</p>
-            </div>
-          ))}
-        </div>
-        <div className="p-4 bg-white border-t">
-          <div className="bg-orange-100 p-3 rounded mb-3">
-            <p className="text-sm">Лютая дверка дерево + золото<br/>90 000 руб</p>
-            <button className="text-xs text-gray-500 mt-2">&gt;&gt;</button>
-          </div>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-              placeholder="..."
-              className="flex-1 px-3 py-2 border rounded text-sm"
-            />
-            <button
-              onClick={handleSendMessage}
-              className="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-            >
-              ↑
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  const handleDoorDrag = useCallback((doorId: string, startPoint: Point, endPoint: Point) => {
+    setElements(prev => prev.map(el => {
+      if (el.id === doorId && el.type === 'door') {
+        const door = el as Door;
+        const wall = prev.find(w => w.id === door.wallId && w.type === 'wall') as Wall | undefined;
+        
+        if (wall) {
+          const wallDx = wall.endPoint.x - wall.startPoint.x;
+          const wallDy = wall.endPoint.y - wall.startPoint.y;
+          const wallLength = Math.sqrt(wallDx * wallDx + wallDy * wallDy);
+          
+          if (wallLength > 0) {
+            // Calculate current door length
+            const doorDx = door.endPoint.x - door.startPoint.x;
+            const doorDy = door.endPoint.y - door.startPoint.y;
+            const doorLength = Math.sqrt(doorDx * doorDx + doorDy * doorDy);
+            
+            // Calculate midpoint of dragged door
+            const midPoint = {
+              x: (startPoint.x + endPoint.x) / 2,
+              y: (startPoint.y + endPoint.y) / 2
+            };
+            
+            // Project midpoint onto wall
+            const t = Math.max(0, Math.min(1, 
+              ((midPoint.x - wall.startPoint.x) * wallDx + (midPoint.y - wall.startPoint.y) * wallDy) / (wallLength * wallLength)
+            ));
+            
+            const projectedMid = {
+              x: wall.startPoint.x + t * wallDx,
+              y: wall.startPoint.y + t * wallDy
+            };
+            
+            // Calculate unit vector along wall
+            const unitDx = wallDx / wallLength;
+            const unitDy = wallDy / wallLength;
+            const halfLength = doorLength / 2;
+            
+            return {
+              ...door,
+              startPoint: {
+                x: projectedMid.x - halfLength * unitDx,
+                y: projectedMid.y - halfLength * unitDy
+              },
+              endPoint: {
+                x: projectedMid.x + halfLength * unitDx,
+                y: projectedMid.y + halfLength * unitDy
+              }
+            } as Door;
+          }
+        }
+      }
+      return el;
+    }));
+  }, []);
 
-  // Main Render
+  const handleDoorEndpointDrag = useCallback((doorId: string, isStart: boolean, newPoint: Point) => {
+    setElements(prev => prev.map(el => {
+      if (el.id === doorId && el.type === 'door') {
+        const door = el as Door;
+        const wall = prev.find(w => w.id === door.wallId && w.type === 'wall') as Wall | undefined;
+        
+        if (wall) {
+          const wallDx = wall.endPoint.x - wall.startPoint.x;
+          const wallDy = wall.endPoint.y - wall.startPoint.y;
+          const wallLength = Math.sqrt(wallDx * wallDx + wallDy * wallDy);
+          
+          if (wallLength > 0) {
+            // Project new point onto wall
+            const t = Math.max(0, Math.min(1,
+              ((newPoint.x - wall.startPoint.x) * wallDx + (newPoint.y - wall.startPoint.y) * wallDy) / (wallLength * wallLength)
+            ));
+            
+            const projectedPoint = {
+              x: wall.startPoint.x + t * wallDx,
+              y: wall.startPoint.y + t * wallDy
+            };
+            
+            // Keep the other endpoint fixed
+            const fixedPoint = isStart ? door.endPoint : door.startPoint;
+            
+            // Make sure door has minimum size (20px)
+            const newDx = isStart ? fixedPoint.x - projectedPoint.x : projectedPoint.x - fixedPoint.x;
+            const newDy = isStart ? fixedPoint.y - projectedPoint.y : projectedPoint.y - fixedPoint.y;
+            const newLength = Math.sqrt(newDx * newDx + newDy * newDy);
+            
+            if (newLength < 20) {
+              return el; // Don't update if too small
+            }
+            
+            return {
+              ...door,
+              startPoint: isStart ? projectedPoint : fixedPoint,
+              endPoint: isStart ? fixedPoint : projectedPoint
+            } as Door;
+          }
+        }
+      }
+      return el;
+    }));
+  }, []);
+
+  const handleWallUpdate = useCallback((wallId: string, updates: Partial<Wall>) => {
+    setElements(prev => prev.map(el => 
+      el.id === wallId && el.type === 'wall'
+        ? { ...el, ...updates } as Wall
+        : el
+    ));
+    info('Стена обновлена');
+  }, [info]);
+
+  const handleDeleteElement = useCallback((id: string) => {
+    const element = elements.find(el => el.id === id);
+    setElements(prev => prev.filter(el => el.id !== id));
+    setSelectedId(null);
+    setShowWallPanel(false);
+    setShowProductPanel(false);
+    setSelectedWall(null);
+    setSelectedFurniture(null);
+    
+    if (element) {
+      const typeName = element.type === 'wall' ? 'Стена' : 
+                       element.type === 'window' ? 'Окно' :
+                       element.type === 'door' ? 'Дверь' : 'Элемент';
+      success(`${typeName} удалён`);
+    }
+  }, [elements, success]);
+
+  const handleFurnitureDragEnd = useCallback((id: string, position: Point) => {
+    setElements(prev => {
+      const walls = prev.filter(el => el.type === 'wall') as Wall[];
+      const furniture = prev.find(el => el.id === id && el.type === 'furniture') as Furniture | undefined;
+      
+      if (!furniture) return prev;
+      
+      let snappedPosition = { ...position };
+      const SNAP_THRESHOLD = 50; // pixels - increased for better UX
+      
+      // Get furniture dimensions
+      const furnitureWidth = furniture.dimensions.width * 0.1; // SCALE = 0.1
+      const furnitureHeight = furniture.dimensions.height * 0.1;
+      
+      // Find closest walls and snap to them
+      let closestHorizontalWall: { wallY: number; above: boolean } | undefined = undefined;
+      let closestVerticalWall: { wallX: number; left: boolean } | undefined = undefined;
+      let minHorizontalDist = Infinity;
+      let minVerticalDist = Infinity;
+      
+      walls.forEach(wall => {
+        const dx = wall.endPoint.x - wall.startPoint.x;
+        const dy = wall.endPoint.y - wall.startPoint.y;
+        const isHorizontal = Math.abs(dx) > Math.abs(dy);
+        
+        if (isHorizontal) {
+          const wallY = (wall.startPoint.y + wall.endPoint.y) / 2;
+          
+          // Calculate distance from furniture edge to wall
+          let dist: number;
+          let above: boolean;
+          
+          if (wallY < position.y) {
+            // Wall is above furniture
+            above = true;
+            dist = position.y - furnitureHeight / 2 - wallY;
+          } else {
+            // Wall is below furniture
+            above = false;
+            dist = wallY - (position.y + furnitureHeight / 2);
+          }
+          
+          if (dist >= 0 && dist < SNAP_THRESHOLD && dist < minHorizontalDist) {
+            minHorizontalDist = dist;
+            closestHorizontalWall = { wallY, above };
+          }
+        } else {
+          const wallX = (wall.startPoint.x + wall.endPoint.x) / 2;
+          
+          // Calculate distance from furniture edge to wall
+          let dist: number;
+          let left: boolean;
+          
+          if (wallX < position.x) {
+            // Wall is to the left of furniture
+            left = true;
+            dist = position.x - furnitureWidth / 2 - wallX;
+          } else {
+            // Wall is to the right of furniture
+            left = false;
+            dist = wallX - (position.x + furnitureWidth / 2);
+          }
+          
+          if (dist >= 0 && dist < SNAP_THRESHOLD && dist < minVerticalDist) {
+            minVerticalDist = dist;
+            closestVerticalWall = { wallX, left };
+          }
+        }
+      });
+      
+      // Snap to walls with small gap
+      const GAP = 10; // pixels gap between furniture and wall
+      
+      if (closestHorizontalWall) {
+        const { wallY, above } = closestHorizontalWall;
+        if (above) {
+          // Wall is above furniture - snap furniture below the wall
+          snappedPosition.y = wallY + furnitureHeight / 2 + GAP;
+        } else {
+          // Wall is below furniture - snap furniture above the wall
+          snappedPosition.y = wallY - furnitureHeight / 2 - GAP;
+        }
+      }
+      
+      if (closestVerticalWall) {
+        const { wallX, left } = closestVerticalWall;
+        if (left) {
+          // Wall is to the left - snap furniture to the right of the wall
+          snappedPosition.x = wallX + furnitureWidth / 2 + GAP;
+        } else {
+          // Wall is to the right - snap furniture to the left of the wall
+          snappedPosition.x = wallX - furnitureWidth / 2 - GAP;
+        }
+      }
+      
+      return prev.map(el => 
+      el.id === id && el.type === 'furniture' 
+          ? { ...el, position: snappedPosition } as Furniture
+          : el
+      );
+    });
+  }, []);
+
+  const handleWallEndpointDrag = useCallback((wallId: string, isStart: boolean, newPoint: Point) => {
+    setElements(prev => {
+      const draggedWall = prev.find(el => el.id === wallId && el.type === 'wall') as Wall | undefined;
+      if (!draggedWall) return prev;
+
+      const oldPoint = isStart ? draggedWall.startPoint : draggedWall.endPoint;
+      const tolerance = 5;
+
+      return prev.map(el => {
+        if (el.type !== 'wall') return el;
+        const wall = el as Wall;
+        
+        const shouldUpdateStart = Math.abs(wall.startPoint.x - oldPoint.x) < tolerance && 
+                                 Math.abs(wall.startPoint.y - oldPoint.y) < tolerance;
+        const shouldUpdateEnd = Math.abs(wall.endPoint.x - oldPoint.x) < tolerance && 
+                               Math.abs(wall.endPoint.y - oldPoint.y) < tolerance;
+
+        if (shouldUpdateStart || shouldUpdateEnd) {
+          return {
+            ...wall,
+            startPoint: shouldUpdateStart ? newPoint : wall.startPoint,
+            endPoint: shouldUpdateEnd ? newPoint : wall.endPoint,
+          } as Wall;
+        }
+        
+        return el;
+      });
+    });
+  }, []);
+
+  const handleWindowDrag = useCallback((windowId: string, startPoint: Point, endPoint: Point) => {
+    setElements(prev => prev.map(el => {
+      if (el.id === windowId && el.type === 'window') {
+        const window = el as Window;
+        const wall = prev.find(w => w.id === window.wallId && w.type === 'wall') as Wall | undefined;
+        
+        if (wall) {
+          const wallDx = wall.endPoint.x - wall.startPoint.x;
+          const wallDy = wall.endPoint.y - wall.startPoint.y;
+          const wallLength = Math.sqrt(wallDx * wallDx + wallDy * wallDy);
+          
+          if (wallLength > 0) {
+            // Calculate current window length
+            const windowDx = window.endPoint.x - window.startPoint.x;
+            const windowDy = window.endPoint.y - window.startPoint.y;
+            const windowLength = Math.sqrt(windowDx * windowDx + windowDy * windowDy);
+            
+            // Calculate midpoint of dragged window
+            const midPoint = {
+              x: (startPoint.x + endPoint.x) / 2,
+              y: (startPoint.y + endPoint.y) / 2
+            };
+            
+            // Project midpoint onto wall
+            const t = Math.max(0, Math.min(1, 
+              ((midPoint.x - wall.startPoint.x) * wallDx + (midPoint.y - wall.startPoint.y) * wallDy) / (wallLength * wallLength)
+            ));
+            
+            const projectedMid = {
+              x: wall.startPoint.x + t * wallDx,
+              y: wall.startPoint.y + t * wallDy
+            };
+            
+            // Calculate unit vector along wall
+            const unitDx = wallDx / wallLength;
+            const unitDy = wallDy / wallLength;
+            const halfLength = windowLength / 2;
+            
+            return {
+              ...window,
+              startPoint: {
+                x: projectedMid.x - halfLength * unitDx,
+                y: projectedMid.y - halfLength * unitDy
+              },
+              endPoint: {
+                x: projectedMid.x + halfLength * unitDx,
+                y: projectedMid.y + halfLength * unitDy
+              }
+            } as Window;
+          }
+        }
+      }
+      return el;
+    }));
+  }, []);
+
+  const handleWindowEndpointDrag = useCallback((windowId: string, isStart: boolean, newPoint: Point) => {
+    setElements(prev => prev.map(el => {
+      if (el.id === windowId && el.type === 'window') {
+        const window = el as Window;
+        const wall = prev.find(w => w.id === window.wallId && w.type === 'wall') as Wall | undefined;
+        
+        if (wall) {
+          const wallDx = wall.endPoint.x - wall.startPoint.x;
+          const wallDy = wall.endPoint.y - wall.startPoint.y;
+          const wallLength = Math.sqrt(wallDx * wallDx + wallDy * wallDy);
+          
+          if (wallLength > 0) {
+            // Project new point onto wall
+            const t = Math.max(0, Math.min(1,
+              ((newPoint.x - wall.startPoint.x) * wallDx + (newPoint.y - wall.startPoint.y) * wallDy) / (wallLength * wallLength)
+            ));
+            
+            const projectedPoint = {
+              x: wall.startPoint.x + t * wallDx,
+              y: wall.startPoint.y + t * wallDy
+            };
+            
+            // Keep the other endpoint fixed
+            const fixedPoint = isStart ? window.endPoint : window.startPoint;
+            
+            // Make sure window has minimum size (20px)
+            const newDx = isStart ? fixedPoint.x - projectedPoint.x : projectedPoint.x - fixedPoint.x;
+            const newDy = isStart ? fixedPoint.y - projectedPoint.y : projectedPoint.y - fixedPoint.y;
+            const newLength = Math.sqrt(newDx * newDx + newDy * newDy);
+            
+            if (newLength < 20) {
+              return el; // Don't update if too small
+            }
+            
+            return {
+              ...window,
+              startPoint: isStart ? projectedPoint : fixedPoint,
+              endPoint: isStart ? fixedPoint : projectedPoint
+            } as Window;
+          }
+        }
+      }
+      return el;
+    }));
+  }, []);
+
+  const handleSendMessage = useCallback((message: string) => {
+    setChatMessages(prev => [...prev, { text: message, isUser: true }]);
+    
+    setTimeout(() => {
+      const responses = [
+        "Отличная планировка! Рекомендую обратить внимание на рабочий треугольник на кухне - расстояние между холодильником, плитой и мойкой должно быть 1.2-2.7 метра.",
+        "Для гостиной вашего размера я подберу несколько вариантов мебели в оптимальном соотношении цена/качество.",
+        "Вижу, что вы планируете спальню. Рекомендую расположить кровать изголовьем к стене, подальше от двери и окна.",
+        "Анализирую вашу планировку... Могу предложить более эргономичное расположение мебели."
+      ];
+      
+      const response = responses[Math.floor(Math.random() * responses.length)];
+      
+      setChatMessages(prev => [...prev, { 
+        text: response, 
+        isUser: false 
+      }]);
+    }, 1000);
+  }, []);
+
+  const handleToolChange = useCallback((newTool: Tool) => {
+    if (isDrawing) {
+      cancelDrawing();
+    }
+    setTool(newTool);
+    setSelectedId(null);
+    setShowProductPanel(false);
+    setShowWallPanel(false);
+    setSelectedWall(null);
+    setSelectedFurniture(null);
+    setSelectedWindow(null);
+    setSelectedDoor(null);
+  }, [isDrawing, cancelDrawing]);
+
   return (
     <div className="h-screen flex flex-col bg-gray-100">
-      <Toolbar />
+      <Toolbar 
+        tool={tool}
+        viewMode={viewMode}
+        onToolChange={handleToolChange}
+        onViewModeChange={setViewMode}
+      />
       
       <div className="flex-1 flex overflow-hidden">
-        <AIChat />
+        <AIChat 
+          messages={chatMessages}
+          onSendMessage={handleSendMessage}
+        />
         
         <div className="flex-1 relative bg-white">
-          <Stage
-            ref={stageRef}
-            width={window.innerWidth - 640}
-            height={window.innerHeight - 100}
-            onClick={handleStageClick}
-            className="cursor-crosshair"
-          >
-            <Layer>
-              {/* Grid */}
-              {Array.from({ length: 30 }, (_, i) => (
-                <React.Fragment key={`grid-${i}`}>
-                  <Line
-                    points={[i * GRID_SIZE, 0, i * GRID_SIZE, 1500]}
-                    stroke="#f0f0f0"
-                    strokeWidth={1}
-                  />
-                  <Line
-                    points={[0, i * GRID_SIZE, 1500, i * GRID_SIZE]}
-                    stroke="#f0f0f0"
-                    strokeWidth={1}
-                  />
-                </React.Fragment>
-              ))}
-              
-              {/* Render elements */}
-              {elements.map(element => {
-                switch (element.type) {
-                  case 'wall':
-                    return <WallRender key={element.id} wall={element as Wall} />;
-                  case 'window':
-                    return <WindowRender key={element.id} window={element as Window} />;
-                  case 'door':
-                    return <DoorRender key={element.id} door={element as Door} />;
-                  case 'furniture':
-                    return <FurnitureRender key={element.id} furniture={element as Furniture} />;
-                  default:
-                    return null;
-                }
-              })}
-              
-              {/* Drawing preview */}
-              {isDrawing && drawingStart && (
-                <Line
-                  points={[drawingStart.x, drawingStart.y, drawingStart.x, drawingStart.y]}
-                  stroke="gray"
-                  strokeWidth={tool === 'wall' ? WALL_THICKNESS : 8}
-                  dash={[5, 5]}
-                />
-              )}
-              
-              {/* Angle indicators between walls */}
-              {elements
-                .filter(el => el.type === 'wall')
-                .map((wall1, i) => {
-                  const w1 = wall1 as Wall;
-                  return elements
-                    .filter(el => el.type === 'wall')
-                    .slice(i + 1)
-                    .map(wall2 => {
-                      const w2 = wall2 as Wall;
-                      // Check if walls connect
-                      if (
-                        (calculateDistance(w1.endPoint, w2.startPoint) < 20) ||
-                        (calculateDistance(w1.endPoint, w2.endPoint) < 20)
-                      ) {
-                        const angle = calculateAngle(
-                          w1.startPoint,
-                          w1.endPoint,
-                          calculateDistance(w1.endPoint, w2.startPoint) < 20 
-                            ? w2.endPoint 
-                            : w2.startPoint
-                        );
-                        
-                        if (angle !== 0 && angle !== 180) {
-                          return (
-                            <Group key={`angle-${w1.id}-${w2.id}`}>
-                              <Circle
-                                x={w1.endPoint.x}
-                                y={w1.endPoint.y}
-                                radius={25}
-                                stroke="green"
-                                strokeWidth={1}
-                                fill="transparent"
-                              />
-                              <Text
-                                x={w1.endPoint.x - 15}
-                                y={w1.endPoint.y - 8}
-                                text={`${angle}°`}
-                                fontSize={11}
-                                fill="green"
-                              />
-                            </Group>
-                          );
-                        }
-                      }
-                      return null;
-                    });
-                })}
-            </Layer>
-          </Stage>
+          <EditorCanvas
+            width={canvasWidth}
+            height={canvasHeight}
+            elements={elements}
+            selectedId={selectedId}
+            tool={tool}
+            isDrawing={isDrawing}
+            drawingStart={drawingStart}
+            previewEnd={previewEnd}
+            isAxisSnapped={isAxisSnapped}
+            onStageClick={handleStageClick}
+            onStageMouseMove={handleStageMouseMove}
+            onElementClick={handleElementClick}
+            onFurnitureDragEnd={handleFurnitureDragEnd}
+            onWallEndpointDrag={handleWallEndpointDrag}
+            onWindowDrag={handleWindowDrag}
+            onWindowEndpointDrag={handleWindowEndpointDrag}
+            onDoorDrag={handleDoorDrag}
+            onDoorEndpointDrag={handleDoorEndpointDrag}
+          />
           
-          {/* Total Price Display */}
-          <div className="absolute bottom-4 left-4 bg-white p-4 rounded shadow-lg">
-            <h3 className="text-xl font-bold">
-              Итоговая сумма: {totalPrice.toLocaleString()} руб
-            </h3>
-          </div>
+          {totalPrice > 0 && (
+            <div className="absolute bottom-4 left-4 bg-white p-4 rounded-lg shadow-lg border border-gray-200 animate-fade-in">
+              <h3 className="text-xl font-bold text-gray-900">
+                Итоговая сумма: <span className="text-green-600">{totalPrice.toLocaleString()} ₽</span>
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                {elements.filter(el => el.type === 'furniture' || el.type === 'window' || el.type === 'door').length} предметов
+              </p>
+            </div>
+          )}
+
+          {tool === 'wall' && !isDrawing && (
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-blue-500 text-white px-6 py-3 rounded-lg shadow-lg animate-pulse">
+              💡 Кликните для начала рисования стены
+            </div>
+          )}
+          
+          {tool === 'wall' && isDrawing && (
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg">
+              ✏️ Кликните для продолжения, двойной клик для завершения (ESC для отмены)
+            </div>
+          )}
+
+          {(tool === 'window' || tool === 'door') && (
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-purple-500 text-white px-6 py-3 rounded-lg shadow-lg">
+              🎯 Кликните на стену для размещения
+            </div>
+          )}
         </div>
         
-        <ProductPanel />
+        {showProductPanel && (selectedFurniture || selectedWindow || selectedDoor) && (
+          <ProductPanel
+            selectedFurniture={selectedFurniture}
+            selectedWindow={selectedWindow}
+            selectedDoor={selectedDoor}
+            onClose={() => {
+              setShowProductPanel(false);
+              setSelectedFurniture(null);
+              setSelectedWindow(null);
+              setSelectedDoor(null);
+              setSelectedId(null);
+            }}
+            onProductSelect={handleProductSelect}
+          />
+        )}
+      </div>
+
+      {showWallPanel && selectedWall && (
+        <WallPropertiesPanel
+          wall={selectedWall}
+          onUpdate={handleWallUpdate}
+          onClose={() => {
+            setShowWallPanel(false);
+            setSelectedWall(null);
+            setSelectedId(null);
+          }}
+          onDelete={handleDeleteElement}
+        />
+      )}
+
+      {/* Toast notifications */}
+      <div className="fixed top-20 right-4 z-50 space-y-2">
+        {toasts.map(toast => (
+          <Toast
+            key={toast.id}
+            message={toast.message}
+            type={toast.type}
+            duration={toast.duration}
+            onClose={() => removeToast(toast.id)}
+          />
+        ))}
       </div>
     </div>
   );
