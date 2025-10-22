@@ -1,73 +1,135 @@
-# React + TypeScript + Vite
+# 🏠 Room Planner - 2D/3D Планировщик Помещений
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Профессиональный веб-планировщик комнат с 2D редактором и 3D визуализацией.
 
-Currently, two official plugins are available:
+## ✨ Основные возможности
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+### 2D Редактор
+- ✅ Профессиональное рисование стен с умным snapping
+- ✅ Размещение окон и дверей только на стенах
+- ✅ Drag & drop мебели с поворотом
+- ✅ Hover эффекты и интерактивные элементы
+- ✅ Автоподсчет стоимости мебели
+- ✅ AI помощник для планирования
 
-## React Compiler
+### 3D Режим ✨
+- ✅ Полноценная 3D визуализация планировки
+- ✅ Переключение 2D ↔ 3D одной кнопкой
+- ✅ Интерактивная камера (поворот, панорама, зум)
+- ✅ Реалистичное освещение и тени
+- ✅ Все элементы синхронизированы между режимами
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 🚀 Быстрый старт
 
-## Expanding the ESLint configuration
+```bash
+# Установка зависимостей
+npm install
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+# Запуск dev сервера
+npm run dev
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# Откройте в браузере
+http://localhost:5173
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 🎮 Управление
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### 2D режим:
+- **Левый клик** - размещение/выбор объектов
+- **Drag & Drop** - перемещение мебели
+- **Delete** - удаление выбранного элемента
+- **ESC** - отмена текущего действия
+- **Shift + рисование стен** - axis snapping
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 3D режим:
+- **Левая кнопка мыши** - поворот камеры
+- **Правая кнопка мыши** - панорама
+- **Колесо мыши** - приближение/отдаление
+- **Кнопка "2D"** - возврат в 2D режим
+
+## 📚 Документация
+
+- **[USER_GUIDE.md](./USER_GUIDE.md)** - Подробное руководство пользователя
+- **[DEVELOPMENT.md](./DEVELOPMENT.md)** - Документация для разработчиков
+
+## 🛠 Технологии
+
+- **React 19** - UI библиотека
+- **TypeScript 5.8** - Типизация
+- **Vite 7** - Сборщик
+- **Konva** - 2D Canvas рендеринг
+- **Three.js + React Three Fiber** - 3D визуализация
+- **Tailwind CSS 4** - Стилизация
+
+## 📦 Структура проекта
+
 ```
+src/
+├── components/
+│   ├── Editor/         # 2D редактор компоненты
+│   ├── 3D/            # 3D визуализация компоненты
+│   ├── Elements/      # Render элементов (стены, мебель)
+│   ├── Panels/        # UI панели (AI chat, Products)
+│   └── UI/            # UI компоненты (Toast, etc)
+├── hooks/             # Custom React hooks
+├── utils/             # Утилиты (геометрия, конвертация)
+├── types/             # TypeScript типы
+└── constants/         # Константы и mock данные
+```
+
+## 🎯 Основные функции
+
+### Инструменты:
+- 👆 **Select** - выбор и перемещение объектов
+- 🧱 **Wall** - рисование стен с умным snapping
+- 🪟 **Window** - размещение окон на стенах
+- 🚪 **Door** - размещение дверей на стенах
+- 🪑 **Furniture** - стулья, столы, диваны, кровати и т.д.
+
+### Smart Features:
+- Автоматический snap к существующим точкам
+- Axis alignment (горизонталь/вертикаль)
+- Визуальные подсказки при рисовании
+- Валидация размещения окон/дверей
+- Real-time подсчет стоимости
+
+## 🐛 Известные ограничения
+
+- Mock AI (реальная интеграция в планах)
+- Нет сохранения на сервере (LocalStorage в планах)
+- Нет Undo/Redo (в планах)
+- Простая геометрия в 3D (можно улучшить)
+
+## 📈 Планы развития
+
+- [ ] Backend (Go + PostgreSQL)
+- [ ] Сохранение проектов
+- [ ] Undo/Redo функционал
+- [ ] Экспорт в PNG/PDF
+- [ ] Реалистичные 3D модели мебели
+- [ ] VR режим
+- [ ] Интеграция с маркетплейсами
+
+## 🤝 Разработка
+
+```bash
+# Запуск в dev режиме
+npm run dev
+
+# Сборка для production
+npm run build
+
+# Предпросмотр production сборки
+npm run preview
+
+# Линтинг
+npm run lint
+```
+
+## 📝 Лицензия
+
+MIT
+
+---
+
+**Создано с ❤️ для планирования идеальных комнат**

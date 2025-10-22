@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import type { EditorElement, Tool, ViewMode, Furniture, ChatMessage, Product, Point, Window, Door, Wall } from './types/editor';
 import { Toolbar } from './components/Editor/Toolbar';
 import { EditorCanvas } from './components/Editor/EditorCanvas';
+import { Viewer3D } from './components/Editor/Viewer3D';
 import { WallPropertiesPanel } from './components/Editor/WallPropertiesPanel';
 import { ProductPanel } from './components/Panels/ProductPanel';
 import { AIChat } from './components/Panels/AIChat';
@@ -749,26 +750,35 @@ export default function RoomPlannerApp() {
         />
         
         <div className="flex-1 relative bg-white">
-          <EditorCanvas
-            width={canvasWidth}
-            height={canvasHeight}
-            elements={elements}
-            selectedId={selectedId}
-            tool={tool}
-            isDrawing={isDrawing}
-            drawingStart={drawingStart}
-            previewEnd={previewEnd}
-            isAxisSnapped={isAxisSnapped}
-            onStageClick={handleStageClick}
-            onStageMouseMove={handleStageMouseMove}
-            onElementClick={handleElementClick}
-            onFurnitureDragEnd={handleFurnitureDragEnd}
-            onWallEndpointDrag={handleWallEndpointDrag}
-            onWindowDrag={handleWindowDrag}
-            onWindowEndpointDrag={handleWindowEndpointDrag}
-            onDoorDrag={handleDoorDrag}
-            onDoorEndpointDrag={handleDoorEndpointDrag}
-          />
+          {viewMode === '2D' ? (
+            <EditorCanvas
+              width={canvasWidth}
+              height={canvasHeight}
+              elements={elements}
+              selectedId={selectedId}
+              tool={tool}
+              isDrawing={isDrawing}
+              drawingStart={drawingStart}
+              previewEnd={previewEnd}
+              isAxisSnapped={isAxisSnapped}
+              onStageClick={handleStageClick}
+              onStageMouseMove={handleStageMouseMove}
+              onElementClick={handleElementClick}
+              onFurnitureDragEnd={handleFurnitureDragEnd}
+              onWallEndpointDrag={handleWallEndpointDrag}
+              onWindowDrag={handleWindowDrag}
+              onWindowEndpointDrag={handleWindowEndpointDrag}
+              onDoorDrag={handleDoorDrag}
+              onDoorEndpointDrag={handleDoorEndpointDrag}
+            />
+          ) : (
+            <Viewer3D
+              width={canvasWidth}
+              height={canvasHeight}
+              elements={elements}
+              selectedId={selectedId}
+            />
+          )}
           
           {totalPrice > 0 && (
             <div className="absolute bottom-4 left-4 bg-white p-4 rounded-lg shadow-lg border border-gray-200 animate-fade-in">
@@ -793,9 +803,15 @@ export default function RoomPlannerApp() {
             </div>
           )}
 
-          {(tool === 'window' || tool === 'door') && (
+          {(tool === 'window' || tool === 'door') && viewMode === '2D' && (
             <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-purple-500 text-white px-6 py-3 rounded-lg shadow-lg">
               🎯 Кликните на стену для размещения
+            </div>
+          )}
+          
+          {viewMode === '3D' && (
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-purple-500 text-white px-6 py-3 rounded-lg shadow-lg">
+              🎮 Левая кнопка - поворот | Правая - панорама | Колесо - зум
             </div>
           )}
         </div>

@@ -71,9 +71,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </button>
           <button
             onClick={() => onViewModeChange('3D')}
-            disabled
-            className="px-4 py-2 rounded font-medium bg-gray-100 text-gray-400 cursor-not-allowed"
-            title="3D режим в разработке"
+            className={`px-4 py-2 rounded font-medium transition-colors ${
+              viewMode === '3D' 
+                ? 'bg-purple-500 text-white' 
+                : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+            }`}
           >
             3D
           </button>
