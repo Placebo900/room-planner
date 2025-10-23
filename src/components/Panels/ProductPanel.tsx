@@ -47,7 +47,7 @@ export const ProductPanel: React.FC<ProductPanelProps> = ({
   return (
     <div className="w-80 bg-white border-l border-gray-200 overflow-y-auto flex-shrink-0">
       <div className="p-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
-        <h3 className="font-bold text-lg">{title}</h3>
+        <h3 className="font-bold text-lg text-gray-900">{title}</h3>
         <button 
           onClick={onClose}
           className="text-gray-500 hover:text-gray-700 text-xl font-bold"

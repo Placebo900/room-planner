@@ -47,7 +47,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               className={`px-3 py-2 rounded flex flex-col items-center gap-1 transition-all ${
                 tool === t 
                   ? 'bg-green-500 text-white shadow-md' 
-                  : 'bg-gray-100 hover:bg-gray-200'
+                  : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
               }`}
               title={label}
             >
