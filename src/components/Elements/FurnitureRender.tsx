@@ -247,10 +247,13 @@ export const FurnitureRender: React.FC<FurnitureRenderProps> = ({
   const tempFurniture = { ...furniture, position: currentPos };
   const distances = isSelected ? calculateDistances(tempFurniture, walls) : null;
   
+  const rotationDegrees = Math.round((furniture.rotation * 180 / Math.PI) % 360);
+  
   return (
     <Group
       x={furniture.position.x}
       y={furniture.position.y}
+      rotation={(furniture.rotation * 180) / Math.PI}
       draggable
       onDragStart={() => {
         setIsDragging(true);
@@ -268,6 +271,57 @@ export const FurnitureRender: React.FC<FurnitureRenderProps> = ({
     >
       {/* Furniture shape */}
       {renderFurnitureShape(furniture, isSelected)}
+      
+      {/* Rotation indicator when selected */}
+      {isSelected && (
+        <>
+          {/* Rotation arc */}
+          <Circle
+            x={0}
+            y={0}
+            radius={Math.max(furniture.dimensions.width, furniture.dimensions.height) * SCALE * 0.6}
+            stroke="#8b5cf6"
+            strokeWidth={1}
+            dash={[4, 4]}
+          />
+          {/* Direction arrow */}
+          <Line
+            points={[
+              0, 
+              0, 
+              0, 
+              -Math.max(furniture.dimensions.width, furniture.dimensions.height) * SCALE * 0.65
+            ]}
+            stroke="#8b5cf6"
+            strokeWidth={3}
+            lineCap="round"
+          />
+          {/* Arrowhead */}
+          <Line
+            points={[
+              -5, 
+              -Math.max(furniture.dimensions.width, furniture.dimensions.height) * SCALE * 0.65 + 10,
+              0, 
+              -Math.max(furniture.dimensions.width, furniture.dimensions.height) * SCALE * 0.65,
+              5, 
+              -Math.max(furniture.dimensions.width, furniture.dimensions.height) * SCALE * 0.65 + 10
+            ]}
+            stroke="#8b5cf6"
+            strokeWidth={3}
+            lineCap="round"
+            lineJoin="round"
+          />
+          {/* Rotation angle text */}
+          <Text
+            x={-20}
+            y={Math.max(furniture.dimensions.width, furniture.dimensions.height) * SCALE * 0.4}
+            text={`${rotationDegrees}°`}
+            fontSize={14}
+            fill="#8b5cf6"
+            fontStyle="bold"
+          />
+        </>
+      )}
       
       {/* Name and price labels */}
       <Text

@@ -95,11 +95,40 @@ export default function RoomPlannerApp() {
       if (e.key === 'Delete' && selectedId) {
         handleDeleteElement(selectedId);
       }
+      
+      // Rotate furniture with R key
+      if (e.key === 'r' || e.key === 'R') {
+        if (selectedFurniture) {
+          const snapRotation = (rotation: number): number => {
+            const snapThreshold = Math.PI / 18; // 10 degrees
+            const normalizedRotation = ((rotation % (Math.PI * 2)) + (Math.PI * 2)) % (Math.PI * 2);
+            const snapAngles = [0, Math.PI / 2, Math.PI, Math.PI * 1.5];
+            
+            for (const snapAngle of snapAngles) {
+              if (Math.abs(normalizedRotation - snapAngle) < snapThreshold) {
+                return snapAngle;
+              }
+            }
+            return rotation;
+          };
+          
+          const delta = e.shiftKey ? -Math.PI / 2 : Math.PI / 2; // Shift+R for counter-clockwise
+          const newRotation = snapRotation(selectedFurniture.rotation + delta);
+          
+          setElements(prev => prev.map(el => 
+            el.id === selectedFurniture.id && el.type === 'furniture' 
+              ? { ...el, rotation: newRotation } as Furniture
+              : el
+          ));
+          setSelectedFurniture(prev => prev ? { ...prev, rotation: newRotation } : null);
+          info(e.shiftKey ? 'Повернуто на 90° влево' : 'Повернуто на 90° вправо');
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDrawing, showWallPanel, showProductPanel, selectedId, cancelDrawing]);
+  }, [isDrawing, showWallPanel, showProductPanel, selectedId, selectedFurniture, cancelDrawing, info]);
 
   const handleStageClick = useCallback((point: Point) => {
     if (tool === 'wall') {
@@ -846,7 +875,7 @@ export default function RoomPlannerApp() {
           
           {viewMode === '3D' && tool === 'select' && (
             <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-purple-500 text-white px-6 py-3 rounded-lg shadow-lg">
-              🎮 Клик - выбор | Перетаскивание мебели | Левая кнопка - поворот | Правая - панорама | Delete - удалить
+              🎮 Клик - выбор | Перетаскивание мебели | R - повернуть | Delete - удалить
             </div>
           )}
           
@@ -870,6 +899,17 @@ export default function RoomPlannerApp() {
               setSelectedId(null);
             }}
             onProductSelect={handleProductSelect}
+            onRotationChange={(id, rotation) => {
+              setElements(prev => prev.map(el => 
+                el.id === id && el.type === 'furniture' 
+                  ? { ...el, rotation } as Furniture
+                  : el
+              ));
+              // Update selected furniture state
+              setSelectedFurniture(prev => 
+                prev ? { ...prev, rotation } : null
+              );
+            }}
           />
         )}
       </div>
