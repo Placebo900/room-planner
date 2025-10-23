@@ -2,6 +2,14 @@ import React, { useRef, useState } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { Furniture } from '../../types/editor';
+import { BedModel } from './models/BedModel';
+import { TableModel } from './models/TableModel';
+import { ChairModel } from './models/ChairModel';
+import { SofaModel } from './models/SofaModel';
+import { SinkModel } from './models/SinkModel';
+import { ToiletModel } from './models/ToiletModel';
+import { ShowerModel } from './models/ShowerModel';
+import { TVModel } from './models/TVModel';
 
 interface Furniture3DProps {
   furniture: Furniture;
@@ -32,10 +40,7 @@ export const Furniture3D: React.FC<Furniture3DProps> = ({
   // Furniture dimensions are in millimeters, convert to meters
   const width = (furniture.dimensions.width || 500) / 1000;  // mm to meters
   const depth = (furniture.dimensions.height || 500) / 1000; // mm to meters (using height as depth)
-  const height = 0.8; // Default furniture height 80cm
-  
-  // Position furniture with bottom on ground
-  const y = height / 2;
+  const height = 0.8; // Default furniture height for fallback
   
   const handlePointerDown = (e: any) => {
     e.stopPropagation();
@@ -82,45 +87,64 @@ export const Furniture3D: React.FC<Furniture3DProps> = ({
     }
   };
   
+  // Render appropriate model based on furniture category
+  const renderFurnitureModel = () => {
+    const category = furniture.category;
+    
+    switch (category) {
+      case 'bed':
+        return <BedModel width={width} depth={depth} isSelected={isSelected} />;
+      case 'table':
+        return <TableModel width={width} depth={depth} isSelected={isSelected} />;
+      case 'stool':
+        return <ChairModel width={width} depth={depth} isSelected={isSelected} />;
+      case 'sofa':
+        return <SofaModel width={width} depth={depth} isSelected={isSelected} />;
+      case 'sink':
+        return <SinkModel width={width} depth={depth} isSelected={isSelected} />;
+      case 'toilet':
+        return <ToiletModel width={width} depth={depth} isSelected={isSelected} />;
+      case 'shower':
+        return <ShowerModel width={width} depth={depth} isSelected={isSelected} />;
+      case 'tv':
+        return <TVModel width={width} depth={depth} isSelected={isSelected} />;
+      default:
+        // Fallback to simple box for unknown categories
+        return (
+          <mesh castShadow receiveShadow>
+            <boxGeometry args={[width, height, depth]} />
+            <meshStandardMaterial
+              color={isSelected ? '#8b5cf6' : hover ? '#6B7280' : '#4A5568'}
+              roughness={0.6}
+              metalness={0.3}
+            />
+          </mesh>
+        );
+    }
+  };
+  
   return (
     <group>
-      <mesh
+      <group
         ref={meshRef}
-        position={[x, y, z]}
+        position={[x, 0, z]}
         rotation={[0, -furniture.rotation, 0]}
-        castShadow
-        receiveShadow
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
         onPointerMove={handlePointerMove}
         onPointerOver={() => setHover(true)}
         onPointerOut={() => setHover(false)}
       >
-        <boxGeometry args={[width, height, depth]} />
-        <meshStandardMaterial
-          color={isSelected ? '#8b5cf6' : hover ? '#6B7280' : '#4A5568'}
-          roughness={0.6}
-          metalness={0.3}
-          emissive={isSelected ? '#7c3aed' : hover ? '#4B5563' : '#000000'}
-          emissiveIntensity={isSelected ? 0.3 : hover ? 0.2 : 0}
-        />
+        {renderFurnitureModel()}
         
-        {/* Selection outline */}
-        {isSelected && (
-          <lineSegments>
-            <edgesGeometry args={[new THREE.BoxGeometry(width, height, depth)]} />
-            <lineBasicMaterial color="#fbbf24" linewidth={3} />
-          </lineSegments>
-        )}
-        
-        {/* Hover outline */}
+        {/* Hover outline for entire furniture */}
         {hover && !isSelected && (
-          <lineSegments>
+          <lineSegments position={[0, height / 2, 0]}>
             <edgesGeometry args={[new THREE.BoxGeometry(width, height, depth)]} />
             <lineBasicMaterial color="#9CA3AF" linewidth={2} />
           </lineSegments>
         )}
-      </mesh>
+      </group>
       
       {/* Dragging indicator */}
       {isDragging && (
