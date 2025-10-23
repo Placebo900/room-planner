@@ -1,13 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import * as THREE from 'three';
 import type { Wall } from '../../types/editor';
 
 interface Wall3DProps {
   wall: Wall;
   isSelected: boolean;
+  onClick?: (id: string) => void;
 }
 
-export const Wall3D: React.FC<Wall3DProps> = ({ wall, isSelected }) => {
+export const Wall3D: React.FC<Wall3DProps> = ({ wall, isSelected, onClick }) => {
+  const [hover, setHover] = useState(false);
   const start = wall.startPoint;
   const end = wall.endPoint;
   
@@ -32,16 +34,32 @@ export const Wall3D: React.FC<Wall3DProps> = ({ wall, isSelected }) => {
   return (
     <group position={[midX, height / 2, midZ]} rotation={[0, -angle, 0]}>
       {/* Wall mesh */}
-      <mesh castShadow receiveShadow>
+      <mesh 
+        castShadow 
+        receiveShadow
+        onClick={(e) => {
+          e.stopPropagation();
+          if (onClick) onClick(wall.id);
+        }}
+        onPointerOver={() => setHover(true)}
+        onPointerOut={() => setHover(false)}
+      >
         <boxGeometry args={[length, height, thickness]} />
         <meshStandardMaterial
-          color={isSelected ? '#3b82f6' : '#e5e7eb'}
+          color={isSelected ? '#3b82f6' : hover ? '#d1d5db' : '#e5e7eb'}
           roughness={0.8}
           metalness={0.1}
           side={THREE.DoubleSide}
         />
       </mesh>
       
+      {/* Selection outline */}
+      {isSelected && (
+        <lineSegments>
+          <edgesGeometry args={[new THREE.BoxGeometry(length, height, thickness)]} />
+          <lineBasicMaterial color="#fbbf24" linewidth={2} />
+        </lineSegments>
+      )}
     </group>
   );
 };

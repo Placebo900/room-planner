@@ -777,6 +777,41 @@ export default function RoomPlannerApp() {
               height={canvasHeight}
               elements={elements}
               selectedId={selectedId}
+              onElementClick={handleElementClick}
+              onFurnitureDragEnd={(id, x, y) => {
+                setElements(prev => prev.map(el => 
+                  el.id === id && el.type === 'furniture' 
+                    ? { ...el, position: { x, y } } as Furniture
+                    : el
+                ));
+              }}
+              onFloorClick={(x3d, z3d) => {
+                // Handle furniture placement in 3D mode
+                if (['stool', 'table', 'sofa', 'bed', 'sink', 'shower', 'toilet', 'tv'].includes(tool)) {
+                  const category = tool;
+                  const defaultProduct = mockProducts[category]?.[0];
+                  if (defaultProduct) {
+                    const id = Date.now().toString();
+                    // Convert 3D coordinates (meters) back to 2D pixels
+                    const x = x3d * 100;
+                    const y = z3d * 100;
+                    const newFurniture: Furniture = {
+                      id,
+                      type: 'furniture',
+                      category,
+                      position: { x, y },
+                      dimensions: { ...defaultProduct.dimensions },
+                      rotation: 0,
+                      price: defaultProduct.price,
+                      name: defaultProduct.name,
+                      productId: defaultProduct.id
+                    };
+                    setElements(prev => [...prev, newFurniture]);
+                    setTool('select');
+                    success(`${defaultProduct.name} добавлен`);
+                  }
+                }
+              }}
             />
           )}
           
@@ -809,9 +844,15 @@ export default function RoomPlannerApp() {
             </div>
           )}
           
-          {viewMode === '3D' && (
+          {viewMode === '3D' && tool === 'select' && (
             <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-purple-500 text-white px-6 py-3 rounded-lg shadow-lg">
-              🎮 Левая кнопка - поворот | Правая - панорама | Колесо - зум
+              🎮 Клик - выбор | Перетаскивание мебели | Левая кнопка - поворот | Правая - панорама | Delete - удалить
+            </div>
+          )}
+          
+          {viewMode === '3D' && ['stool', 'table', 'sofa', 'bed', 'sink', 'shower', 'toilet', 'tv'].includes(tool) && (
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg">
+              🎯 Кликните на пол для размещения мебели
             </div>
           )}
         </div>
